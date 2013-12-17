@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Security.Policy;
 using System.Threading;
+using System.Threading.Tasks;
 using Everest.Caching;
 using Everest.Headers;
 using Everest.SystemNetHttp;
@@ -28,40 +29,40 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void ShouldGetCachedResponsesWhenCacheHasNotExpired()
+        public async Task ShouldGetCachedResponsesWhenCacheHasNotExpired()
         {
             _server.CacheControl = "public, must-revalidate, max-age=10";
-            ShouldGetFreshResource("request 1");
-            ShouldGetCachedResource("request 1");
+            await ShouldGetFreshResource("request 1");
+            await ShouldGetCachedResource("request 1");
         }
 
         [Test]
-        public void ShouldGetFreshResponsesWhenCacheHasExpired()
+        public async Task ShouldGetFreshResponsesWhenCacheHasExpired()
         {
             _server.CacheControl = "public, must-revalidate, max-age=1";
-            ShouldGetFreshResource("request 1");
-            Wait(1);
-            ShouldGetFreshResource("request 2");
+            await ShouldGetFreshResource("request 1");
+            await Wait(1);
+            await ShouldGetFreshResource("request 2");
         }
 
-        private void Wait(int seconds)
+        private Task Wait(int seconds)
         {
-            Thread.Sleep(TimeSpan.FromSeconds(seconds));
+            return Task.Delay(seconds*1000);
         }
 
-        private void ShouldGetCachedResource(string body)
+        private async Task ShouldGetCachedResource(string body)
         {
             var numberOfRequests = _server.NumberOfRequests;
-            var response = _client.Get("");
+            var response = await _client.Get("");
             Assert.That(_server.NumberOfRequests, Is.EqualTo(numberOfRequests));
-            Assert.That(response.Body, Is.EqualTo(body));
+            Assert.That(await response.GetBodyAsync(), Is.EqualTo(body));
         }
 
-        private void ShouldGetFreshResource(string body)
+        private async Task ShouldGetFreshResource(string body)
         {
             var numberOfRequests = _server.NumberOfRequests;
             var response = _client.Get("");
-            Assert.That(response.Body, Is.EqualTo(body));
+            Assert.That(await response.GetBody(), Is.EqualTo(body));
             Assert.That(_server.NumberOfRequests, Is.EqualTo(numberOfRequests + 1));
         }
     }

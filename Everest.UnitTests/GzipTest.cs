@@ -1,4 +1,5 @@
-﻿using Everest.Headers;
+﻿using System.Threading.Tasks;
+using Everest.Headers;
 using NUnit.Framework;
 
 namespace Everest.UnitTests
@@ -7,10 +8,10 @@ namespace Everest.UnitTests
     public class GzipTest
     {
         [Test]
-        public void ReadsGzippedContent()
+        public async Task ReadsGzippedContent()
         {
             var response = new RestClient().Get("http://httpbin.org/gzip");
-            Assert.That(response.Body, Is.StringContaining("gzipped"));
+            Assert.That(await response.GetBody(), Is.StringContaining("gzipped"));
         }
     }
 }

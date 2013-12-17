@@ -5,16 +5,44 @@ using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading.Tasks;
 using Everest.Content;
 using Everest.Headers;
 using Everest.Pipeline;
 using Everest.Redirection;
 using Everest.Status;
 using NUnit.Framework;
+using NUnit.Framework.Constraints;
 using SelfishHttp;
 
 namespace Everest.UnitTests
 {
+    internal static class AsyncThrows
+    {
+        public static TypeConstraint InstanceOf<T>() where T : Exception
+        {
+            return InstanceOf(typeof (T));
+        }
+
+        public static TypeConstraint InstanceOf(Type type)
+        {
+            return new AsyncConstraint(type);
+        }
+
+        private class AsyncConstraint : InstanceOfTypeConstraint
+        {
+            public AsyncConstraint(Type type) : base(type)
+            {
+            }
+
+            public override bool Matches(object actual)
+            {
+
+                return base.Matches(actual);
+            }
+        }
+    }
+
     [TestFixture]
     public class RestClientTest
     {
@@ -38,145 +66,147 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void ReturnsNewResourceAfterEachRequest()
+        public async Task ReturnsNewResourceAfterEachRequest()
         {
-            var fooResource = _client.Get("/foo");
-            var fooBody = fooResource.Body;
+            var fooResource = await _client.Get("/foo");
+            var fooBody = await fooResource.GetBodyAsync();
             Assert.That(fooBody, Is.EqualTo("foo!"));
 
-            var barResource = fooResource.Get("foo/bar");
-            var barBody = barResource.Body;
+            var barResource = await fooResource.Get("foo/bar");
+            var barBody = await barResource.GetBodyAsync();
             Assert.That(barBody, Is.EqualTo("foo bar?"));
         }
 
         [Test]
-        public void FollowsLinksRelativeToResourceEvenAfterRedirect()
+        public async Task FollowsLinksRelativeToResourceEvenAfterRedirect()
         {
             _server.OnGet("/redirect").RedirectTo("/foo/");
             _server.OnGet("/foo/").RespondWith("foo!");
             _server.OnGet("/foo/bar/baz").RespondWith("baz!");
-            var body = _client.Get("/redirect").Get("bar/baz").Body;
+            var body = await _client.Get("/redirect").Get("bar/baz").GetBody();
             Assert.That(body, Is.EqualTo("baz!"));
         }
 
         [Test]
-        public void AppliesAmbientOptionsToRedirects()
+        public async Task AppliesAmbientOptionsToRedirects()
         {
             _server.OnGet("/redirect").RedirectTo("/x");
             _server.OnGet("/x").Respond((req, res) => res.Body = req.Headers["x-foo"]);
             var client = new RestClient(BaseAddress, new RequestHeader("x-foo", "yippee"));
-            var body = client.Get("/redirect").Body;
+            var body = await client.Get("/redirect").GetBody();
             Assert.That(body, Is.EqualTo("yippee"));
         }
 
         [Test]
-        public void AppliesAuthorizationHeaderToRedirects()
+        public async Task AppliesAuthorizationHeaderToRedirects()
         {
             _server.OnGet("/redirect").RedirectTo("/x");
             _server.OnGet("/x").Respond((req, res) => res.Body = req.Headers["Authorization"]);
-            var body = _client.Get("/redirect", new RequestHeader("Authorization", "yikes"),
-                new AutoRedirect { EnableAutomaticRedirection = true, ForwardAuthorizationHeader = true }).Body;
+            var body = await _client.Get("/redirect", new RequestHeader("Authorization", "yikes"),
+                new AutoRedirect { EnableAutomaticRedirection = true, ForwardAuthorizationHeader = true }).GetBody();
             Assert.That(body, Is.EqualTo("yikes"));
         }
 
         [Test]
-        public void AppliesAuthorizationHeaderToPermanentRedirects() {
+        public async Task AppliesAuthorizationHeaderToPermanentRedirects()
+        {
             _server.OnGet("/redirect").Respond((req, res) => { res.StatusCode = (int)HttpStatusCode.MovedPermanently;
                 res.Headers["Location"] = "/x";
             });
             _server.OnGet("/x").Respond((req, res) => res.Body = req.Headers["Authorization"]);
-            var body = _client.Get("/redirect", new RequestHeader("Authorization", "crumbs"),
-                new AutoRedirect { EnableAutomaticRedirection = true, ForwardAuthorizationHeader = true }).Body;
+            var body = await _client.Get("/redirect", new RequestHeader("Authorization", "crumbs"),
+                new AutoRedirect { EnableAutomaticRedirection = true, ForwardAuthorizationHeader = true }).GetBody();
             Assert.That(body, Is.EqualTo("crumbs"));
         }
 
         [Test]
-        public void AllowsAutoRedirectToBeDisabledForSingleRequest()
+        public async Task AllowsAutoRedirectToBeDisabledForSingleRequest()
         {
             _server.OnGet("/redirect").RedirectTo("/x");
-            var response = _client.Get("/redirect", AutoRedirect.DoNotAutoRedirect);
+            var response = await _client.Get("/redirect", AutoRedirect.DoNotAutoRedirect);
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
         }
 
         [Test]
-        public void AppliesOverridingOptionsToRedirects() {
+        public async Task AppliesOverridingOptionsToRedirects()
+        {
             _server.OnGet("/redirect").RedirectTo("/x");
             _server.OnGet("/x").Respond((req, res) => res.Body = req.Headers["x-foo"]);
-            var body = _client.Get("/redirect", new RequestHeader("x-foo", "yippee")).Body;
+            var body = await _client.Get("/redirect", new RequestHeader("x-foo", "yippee")).GetBody();
             Assert.That(body, Is.EqualTo("yippee"));
         }
 
         [Test]
-        public void MakesPutRequests()
+        public async Task MakesPutRequests()
         {
             _server.OnPut("/foo").RespondWith(requestBody => "putted " + requestBody);
-            var body = _client.Put("/foo", "body").Body;
+            var body = await _client.Put("/foo", "body").GetBody();
             Assert.That(body, Is.EqualTo("putted body"));
         }
 
         [Test]
-        public void ExposesResponseHeaders()
+        public async Task ExposesResponseHeaders()
         {
             _server.OnGet("/whaa").Respond((req, res) => { res.Headers["X-Custom"] = "my custom header"; });
 
-            var response = _client.Get("/whaa", ExpectStatus.OK);
+            var response = await _client.Get("/whaa", ExpectStatus.OK);
             Assert.That(response.Headers["X-Custom"], Is.EqualTo("my custom header"));
         }
 
         [Test]
-        public void ExposesContentHeadersInTheSameCollectionAsOtherResponseHeaders()
+        public async Task ExposesContentHeadersInTheSameCollectionAsOtherResponseHeaders()
         {
             _server.OnGet("/contentType").Respond((req, res) => { res.Headers["Content-Type"] = "x/foo"; });
 
-            var response = _client.Get("/contentType");
+            var response = await _client.Get("/contentType");
             Assert.That(response.Headers.ContainsKey("Content-Type"));
             Assert.That(response.Headers["Content-Type"], Is.EqualTo("x/foo"));
         }
 
         [Test]
-        public void MakesOptionsRequests()
+        public async Task MakesOptionsRequests()
         {
             _server.OnOptions("/whaa").RespondWith("options!");
-            var body = _client.Options("/whaa", ExpectStatus.OK).Body;
+            var body = await _client.Options("/whaa", ExpectStatus.OK).GetBody();
             Assert.That(body, Is.EqualTo("options!"));
         }
 
         [Test]
-        public void MakesPostRequests()
+        public async Task MakesPostRequests()
         {
             _server.OnPost("/foo").RespondWith(requestBody => "posted " + requestBody);
-            var body = _client.Post("/foo", "body", ExpectStatus.OK).Body;
+            var body = await _client.Post("/foo", "body", ExpectStatus.OK).GetBody();
             Assert.That(body, Is.EqualTo("posted body"));
         }
 
         [Test]
-        public void MakesPostRequestsWithBodyContent()
+        public async Task MakesPostRequestsWithBodyContent()
         {
             _server.OnPost("/foo").RespondWith(requestBody => "posted " + requestBody);
-            var body = _client.Post("/foo", new StringBodyContent("body"), ExpectStatus.OK).Body;
+            var body = await _client.Post("/foo", new StringBodyContent("body"), ExpectStatus.OK).GetBody();
             Assert.That(body, Is.EqualTo("posted body"));
         }
 
         [Test]
-        public void MakesHeadRequests()
+        public async Task MakesHeadRequests()
         {
             _server.OnHead("/foo").Respond((req, res) => res.StatusCode = 303);
-            var response = _client.Head("/foo", new ExpectStatus(HttpStatusCode.SeeOther));
+            var response = await _client.Head("/foo", new ExpectStatus(HttpStatusCode.SeeOther));
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.SeeOther));
         }
 
         [Test]
-        public void MakesPostRequestsToSelf()
+        public async Task MakesPostRequestsToSelf()
         {
             _server.OnGet("/self").RespondWith("good on ya");
             _server.OnPost("/self").RespondWith(requestBody => "posted " + requestBody);
-            var response = _client.Get("/self");
-            var body = response.Post("body").Body;
+            var response = await _client.Get("/self");
+            var body = await response.Post("body").GetBody();
             Assert.That(body, Is.EqualTo("posted body"));
         }
 
         [Test]
-        public void CanPutBinaryContentInStream()
+        public async Task CanPutBinaryContentInStream()
         {
             _server.OnPut("/image").Respond((req, res) =>
                 {
@@ -185,17 +215,17 @@ namespace Everest.UnitTests
                     res.Body = body;
                 });
 
-            var image = _client.Put("/image", new StreamBodyContent(new MemoryStream(Encoding.UTF8.GetBytes("this is an image")), "image/png"));
+            var image = await _client.Put("/image", new StreamBodyContent(new MemoryStream(Encoding.UTF8.GetBytes("this is an image")), "image/png"));
             Assert.That(image.ContentType, Is.EqualTo("image/png"));
-            Assert.That(image.Body, Is.EqualTo("this is an image"));
+            Assert.That(await image.GetBodyAsync(), Is.EqualTo("this is an image"));
         }
 
         [Test]
-        public void GetExpects200RangeStatusByDefault()
+        public async Task GetExpects200RangeStatusByDefault()
         {
             try
             {
-                _client.Get("/non-existent");
+                await _client.Get("/non-existent");
             }
             catch (UnexpectedStatusException e)
             {
@@ -204,65 +234,67 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void GetExpectStatusIsOverridable()
+        public async Task GetExpectStatusIsOverridable()
         {
-            Assert.That(() => _client.Get("/foo", new ExpectStatus(HttpStatusCode.InternalServerError)), Throws.InstanceOf<UnexpectedStatusException>());
+            Assert.That(async () => await _client.Get("/foo", new ExpectStatus(HttpStatusCode.InternalServerError)), 
+                Throws.InstanceOf<UnexpectedStatusException>());
         }
 
         [Test]
-        public void PutExpectStatusIsOverridable()
+        public async Task PutExpectStatusIsOverridable()
         {
-            Assert.That(() => _client.Put("/foo", "oops", new ExpectStatus(HttpStatusCode.InternalServerError)), Throws.InstanceOf<UnexpectedStatusException>());
+            Assert.That(async () => 
+                await _client.Put("/foo", "oops", new ExpectStatus(HttpStatusCode.InternalServerError)), Throws.InstanceOf<UnexpectedStatusException>());
         }
 
         [Test]
-        public void ThrowsWhenUnsupportedPerRequestOptionsAreSupplied()
+        public async Task ThrowsWhenUnsupportedPerRequestOptionsAreSupplied()
         {
-            Assert.That(() => _client.Get("/foo", new BogusOption()), Throws.InstanceOf<UnsupportedOptionException>());
+            Assert.That(async () => await _client.Get("/foo", new BogusOption()), Throws.InstanceOf<UnsupportedOptionException>());
         }
 
         [Test]
-        public void ThrowsWhenUnsupportedAmbientOptionsAreSupplied()
+        public async Task ThrowsWhenUnsupportedAmbientOptionsAreSupplied()
         {
             _server.OnGet("/blah").RespondWith("ok!");
-            Assert.That(() => new RestClient(BaseAddress, new BogusOption()).Get("/blah"), Throws.InstanceOf<UnsupportedOptionException>());
+            Assert.That(async () => await new RestClient(BaseAddress, new BogusOption()).Get("/blah"), Throws.InstanceOf<UnsupportedOptionException>());
         }
 
         [Test]
-        public void AppliesPipelineOptionsToSubsequentRequests()
+        public async Task AppliesPipelineOptionsToSubsequentRequests()
         {
             _server.OnGet("/headers").Respond((req, res) => res.Body = req.Headers["x-per-client"]);
 
             var client = new RestClient(BaseAddress, new SetRequestHeaders(new Dictionary<string, string> { { "x-per-client", "x" } }));
             var firstResponse = client.Get("/headers");
-            Assert.That(firstResponse.Body, Is.EqualTo("x"));
+            Assert.That(await firstResponse.GetBody(), Is.EqualTo("x"));
             var secondResponse = firstResponse.Get("/headers");
-            Assert.That(secondResponse.Body, Is.EqualTo("x"));
+            Assert.That(await secondResponse.GetBody(), Is.EqualTo("x"));
         }
 
         [Test]
-        public void AppliesPipelineOptionsPerRequest()
+        public async Task AppliesPipelineOptionsPerRequest()
         {
             _server.OnGet("/headers").Respond((req, res) => res.Body = req.Headers["x-per-client"]);
 
             var client = new RestClient(BaseAddress);
-            var firstResponse = client.Get("/headers", new SetRequestHeaders(new Dictionary<string, string> { { "x-per-client", "x" } }));
-            Assert.That(firstResponse.Body, Is.EqualTo("x"));
+            var firstResponse = await client.Get("/headers", new SetRequestHeaders(new Dictionary<string, string> { { "x-per-client", "x" } }));
+            Assert.That(await firstResponse.GetBodyAsync(), Is.EqualTo("x"));
             var secondResponse = firstResponse.Get("/headers");
-            Assert.That(secondResponse.Body, Is.EqualTo(""));
+            Assert.That(await secondResponse.GetBody(), Is.EqualTo(""));
         }
 
         [Test]
-        public void ProvidesAConvenientWayToSetAcceptHeader()
+        public async Task ProvidesAConvenientWayToSetAcceptHeader()
         {
             _server.OnGet("/accept").Respond((req, res) => res.Body = req.Headers["Accept"]);
             var client = new RestClient(BaseAddress);
-            var response = client.Get("/accept", new Accept("foo/bar"));
-            Assert.That(response.Body, Is.EqualTo("foo/bar"));
+            var response = await client.Get("/accept", new Accept("foo/bar"));
+            Assert.That(await response.GetBodyAsync(), Is.EqualTo("foo/bar"));
         }
 
         [Test]
-        public void CanComputeHeadersDynamically()
+        public async Task CanComputeHeadersDynamically()
         {
             var i = 0;
             var dynamicRequestHeaders = new DynamicRequestHeaders(
@@ -271,8 +303,8 @@ namespace Everest.UnitTests
             _server.OnGet("/X").Respond((req, res) => res.Body = req.Headers["X"]);
             var client = new RestClient(BaseAddress, new SetRequestHeaders(dynamicRequestHeaders));
  
-            Assert.That(client.Get("/X").Body, Is.EqualTo("1"));
-            Assert.That(client.Get("/X").Body, Is.EqualTo("2"));
+            Assert.That(await client.Get("/X").GetBody(), Is.EqualTo("1"));
+            Assert.That(await client.Get("/X").GetBody(), Is.EqualTo("2"));
         }
 
         class DynamicRequestHeaders : IEnumerable<KeyValuePair<string, string>>
@@ -296,13 +328,13 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void ThrowsWhenExpectedResponseHeaderIsNotSet()
+        public async Task ThrowsWhenExpectedResponseHeaderIsNotSet()
         {
             _server.OnGet("/respond-with-bar").RespondWith("oops, no x header!");
             var client = new RestClient(BaseAddress, new ExpectResponseHeaders { { "x", "foo" }});
             try
             {
-                client.Get("/respond-with-bar");
+                await client.Get("/respond-with-bar");
                 Assert.Fail("Expected UnexpectedResponseHeaderException");
             }
             catch (UnexpectedResponseHeaderException e)
@@ -315,13 +347,13 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void ThrowsWhenExpectedResponseHeaderHasUnexpectedValue()
+        public async Task ThrowsWhenExpectedResponseHeaderHasUnexpectedValue()
         {
             _server.OnGet("/respond-with-bar").Respond((req, res) => res.Headers["x"] = "bar");
             var client = new RestClient(BaseAddress, new ExpectResponseHeaders { { "x", "foo" }});
             try
             {
-                client.Get("/respond-with-bar");
+                await client.Get("/respond-with-bar");
                 Assert.Fail("Expected UnexpectedResponseHeaderException");
             }
             catch (UnexpectedResponseHeaderException e)
@@ -334,21 +366,21 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void DoesNotThrowWhenExpectedResponseContentHeadersAreSetToExpectedValues()
+        public async Task DoesNotThrowWhenExpectedResponseContentHeadersAreSetToExpectedValues()
         {
             _server.OnGet("/respond-with-foo").Respond((req, res) => res.Headers["Content-Type"] = "x/foo");
             var client = new RestClient(BaseAddress, new ExpectResponseHeaders { { "Content-Type", "x/foo" } });
-            Assert.That(() => client.Get("/respond-with-foo"), Throws.Nothing);
+            Assert.That(async () => await client.Get("/respond-with-foo"), Throws.Nothing);
         }
 
         [Test]
-        public void ThrowsWhenExpectedResponseContentHeaderIsNotSet()
+        public async Task ThrowsWhenExpectedResponseContentHeaderIsNotSet()
         {
             _server.OnGet("/respond-with-bar").Respond((req, res) => res.Headers["Content-Type"] = null);
             var client = new RestClient(BaseAddress, new ExpectResponseHeaders { { "Content-Type", "oh/really" } });
             try
             {
-                client.Get("/respond-with-bar");
+                await client.Get("/respond-with-bar");
                 Assert.Fail("Expected UnexpectedResponseHeaderException");
             }
             catch (UnexpectedResponseHeaderException e)
@@ -361,13 +393,13 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void ThrowsWhenExpectedResponseContentHeaderHasUnexpectedValue()
+        public async Task ThrowsWhenExpectedResponseContentHeaderHasUnexpectedValue()
         {
             _server.OnGet("/respond-with-bar").Respond((req, res) => res.Headers["Content-Type"] = "x/bar");
             var client = new RestClient(BaseAddress, new ExpectResponseHeaders { { "Content-Type", "x/foo" } });
             try
             {
-                client.Get("/respond-with-bar");
+                await client.Get("/respond-with-bar");
                 Assert.Fail("Expected UnexpectedResponseHeaderException");
             }
             catch (UnexpectedResponseHeaderException e)
@@ -380,11 +412,11 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void DoesNotThrowWhenExpectedResponseHeadersAreSetToExpectedValues()
+        public async Task DoesNotThrowWhenExpectedResponseHeadersAreSetToExpectedValues()
         {
             _server.OnGet("/respond-with-foo").Respond((req, res) => res.Headers["x"] = "foo");
             var client = new RestClient(BaseAddress, new ExpectResponseHeaders { { "x", "foo" } });
-            Assert.That(() => client.Get("/respond-with-foo"), Throws.Nothing);
+            Assert.That(async () => await client.Get("/respond-with-foo"), Throws.Nothing);
         }
 
         [Test]
@@ -400,21 +432,21 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void AcceptsStarSlashStarByDefault()
+        public async Task AcceptsStarSlashStarByDefault()
         {
             _server.OnGet("/accept").Respond((req, res) => res.Body = req.Headers["Accept"]);
-            Assert.That(new RestClient(BaseAddress).Get("/accept").Body, Is.EqualTo("*/*"));
+            Assert.That(await new RestClient(BaseAddress).Get("/accept").GetBody(), Is.EqualTo("*/*"));
         }
 
         [Test]
-        public void AcceptsGzipAndDeflateEncodingByDefault()
+        public async Task AcceptsGzipAndDeflateEncodingByDefault()
         {
             _server.OnGet("/accept-encoding").Respond((req, res) => { res.Body = req.Headers["Accept-Encoding"]; });
-            Assert.That(_client.Get("/accept-encoding").Body, Is.EqualTo("gzip, deflate"));
+            Assert.That(await _client.Get("/accept-encoding").GetBody(), Is.EqualTo("gzip, deflate"));
         }
 
         [Test]
-        public void AddsContentHeadersToContent()
+        public async Task AddsContentHeadersToContent()
         {
             _server.OnPut("/testput").AddHandler((context, next) =>
                 {
@@ -424,7 +456,7 @@ namespace Everest.UnitTests
 
             var content = new StreamBodyContent(new MemoryStream(Encoding.UTF8.GetBytes("Test")), "text/plain");
             content.Headers.Add("Content-Encoding", "gzip");
-            _client.Put("/testput", content);
+            await _client.Put("/testput", content);
         }
 
         private class BogusOption : PipelineOption

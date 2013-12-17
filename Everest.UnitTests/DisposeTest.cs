@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using Everest.Content;
 using Everest.Pipeline;
 using Everest.Status;
@@ -11,12 +12,12 @@ namespace Everest.UnitTests
     public class DisposeTest
     {
         [Test]
-        public void DisposingAResponseDisposesTheUnderlyingResponse()
+        public async Task DisposingAResponseDisposesTheUnderlyingResponse()
         {
             var client = new TracksWhenDisposedClient();
             var clientFactory = new StubAdapterFactory(client);
             var restClient = new RestClient(new Uri("http://localhost"), clientFactory, new PipelineOption[0]);
-            var response = restClient.Get("oops");
+            var response = await restClient.Get("oops");
             Assert.That(client.Responses.Count, Is.EqualTo(1));
             Assert.That(client.Responses[0].DisposeCount, Is.EqualTo(0));
             response.Dispose();
@@ -24,11 +25,11 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void RequestContentStreamIsDisposedAutomatically()
+        public async Task RequestContentStreamIsDisposedAutomatically()
         {
             var client = new RestClient("http://localhost/abc");
             var memoryStream = new TracksWhenDisposedMemoryStream();
-            client.Post("something", new StreamBodyContent(memoryStream, "foo/bar"), ExpectStatus.IgnoreStatus);
+            await client.Post("something", new StreamBodyContent(memoryStream, "foo/bar"), ExpectStatus.IgnoreStatus);
             Assert.That(memoryStream.DisposedCount, Is.EqualTo(1));
         }
     }

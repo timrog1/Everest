@@ -35,15 +35,15 @@ namespace Everest.SystemNetHttp
             _client = new HttpClient(handler);
         }
 
-        public Task<HttpResponseMessage> SendAsync(HttpRequestMessage request)
-        {
-            var response = _client.SendAsync(request).Result;
+		public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request)
+		{
+            var response = await _client.SendAsync(request);
             if (ShouldManuallyRedirect(response))
             {
-                return _client.SendAsync(CreateRedirectRequest(request, response));
+                return await _client.SendAsync(CreateRedirectRequest(request, response));
             }
-            return Task.Factory.StartNew(() => response);
-        }
+		    return response;
+		}
 
         private bool ShouldManuallyRedirect(HttpResponseMessage response)
         {
