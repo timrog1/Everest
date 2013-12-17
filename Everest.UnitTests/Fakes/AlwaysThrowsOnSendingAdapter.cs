@@ -8,10 +8,7 @@ namespace Everest.UnitTests.Fakes
     {
         public Task<HttpResponseMessage> SendAsync(HttpRequestMessage request)
         {
-            return Task.Factory.StartNew<HttpResponseMessage>(() =>
-            {
-                throw new DeliberateException();
-            });
+            throw new DeliberateException();
         }
 
         public HttpClientAdapter CreateClient(PipelineOptions options)

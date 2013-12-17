@@ -1,4 +1,5 @@
-﻿using Everest.Headers;
+﻿using System.Threading.Tasks;
+using Everest.Headers;
 using NUnit.Framework;
 using SelfishHttp;
 
@@ -23,17 +24,17 @@ namespace Everest.UnitTests
         }
 
         [Test]
-        public void AddsOptions()
+        public async Task AddsOptions()
         {
             _server.OnGet("/headers").Respond((req, res) => res.Body = req.Headers["a"] + "," + req.Headers["b"]);
 
             var client = new RestClient(BaseAddress);
-            var response = client.With(new RequestHeader("a", "1"), new RequestHeader("b", "2")).Get(BaseAddress + "/headers");
-            Assert.That(response.Body, Is.EqualTo("1,2"));
-            response = response.With(new RequestHeader("a", "3")).Get("/headers");
-            Assert.That(response.Body, Is.EqualTo("3,2"));
-            response = response.With(new RequestHeader("b", "4")).Get("/headers");
-            Assert.That(response.Body, Is.EqualTo("3,4"));
+            var response = await client.With(new RequestHeader("a", "1"), new RequestHeader("b", "2")).Get(BaseAddress + "/headers");
+            Assert.That(await response.GetBodyAsync(), Is.EqualTo("1,2"));
+            response = await response.With(new RequestHeader("a", "3")).Get("/headers");
+            Assert.That(await response.GetBodyAsync(), Is.EqualTo("3,2"));
+            response = await response.With(new RequestHeader("b", "4")).Get("/headers");
+            Assert.That(await response.GetBodyAsync(), Is.EqualTo("3,4"));
         }
     }
 }

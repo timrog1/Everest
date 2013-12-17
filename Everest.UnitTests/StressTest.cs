@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -43,20 +44,23 @@ namespace Everest.UnitTests
             Measure("RestClient per request", () => new RestClient(BaseAddress).Get("/foo"));
         }
 
-        private static string MakeRequest(HttpClient httpClient, Uri requestUri)
+        private static async Task<string> MakeRequest(HttpClient httpClient, Uri requestUri)
         {
-            return httpClient.SendAsync(new HttpRequestMessage
-                                            {
-                                                Method = HttpMethod.Get,
-                                                RequestUri = requestUri
-                                            }).Result.ToString();
+            var result = await httpClient.SendAsync(new HttpRequestMessage
+            {
+                Method = HttpMethod.Get,
+                RequestUri = requestUri
+            });
+
+            return result.ToString();
         }
 
-        private void Measure(string clientName, Action action)
+        private void Measure(string clientName, Func<Task> action)
         {
             _stopwatch.Reset();
             _stopwatch.Start();
-            Parallel.For(0, Count, i => action());
+            var tasks = Enumerable.Range(1, Count).Select(_ => action()).ToArray();
+            Task.WaitAll(tasks);
             _stopwatch.Stop();
             Console.WriteLine(clientName + ": " + _stopwatch.ElapsedMilliseconds);
         }

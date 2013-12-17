@@ -7,5 +7,10 @@ namespace Everest
     public interface HttpClientAdapter : IDisposable
     {
         Task<HttpResponseMessage> SendAsync(HttpRequestMessage request);
+
+
+
+
+
     }
 }

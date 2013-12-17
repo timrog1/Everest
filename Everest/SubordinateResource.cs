@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
+using System.Threading.Tasks;
 using Everest.Headers;
 using Everest.Pipeline;
 
@@ -18,14 +19,14 @@ namespace Everest
             _httpResponseMessage = httpResponseMessage;
         }
 
-        public string Body
+        public Task<string> GetBodyAsync()
         {
-            get { return _httpResponseMessage.Content.ReadAsStringAsync().Result; }
+            return _httpResponseMessage.Content.ReadAsStringAsync();
         }
 
-        public byte[] BodyAsByteArray
+        public Task<byte[]> GetBodyAsBytesAsync()
         {
-            get { return _httpResponseMessage.Content.ReadAsByteArrayAsync().Result; }
+            return _httpResponseMessage.Content.ReadAsByteArrayAsync();
         }
 
         public string ContentType

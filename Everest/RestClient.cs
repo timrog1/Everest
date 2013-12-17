@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Threading.Tasks;
 using Everest.Auth;
 using Everest.Content;
 using Everest.Headers;
@@ -28,6 +29,7 @@ namespace Everest
         private readonly HttpClientAdapterFactory _adapterFactory;
 
         private readonly IEnumerable<PipelineOption> _ambientPipelineOptions;
+
 
         public RestClient() : this(new PipelineOption[] { })
         {
@@ -67,31 +69,31 @@ namespace Everest
                 .Aggregate(uri, (resolved, prop) => resolved.Replace("{" + prop.Name + "}", prop.GetValue(arguments, null).ToString()));
         }
 
-        public Response Send(HttpMethod method, string uri, BodyContent body, params PipelineOption[] overridingPipelineOptions)
+        public async Task<Response> Send(HttpMethod method, string uri, BodyContent body, params PipelineOption[] overridingPipelineOptions)
         {
             var combinedOptions = new PipelineOptions(DefaultPipelineOptions.Concat(_ambientPipelineOptions.Concat(overridingPipelineOptions)));
             HttpRequestMessageRequestDetails requestDetails;
             var request = CreateRequestMessage(method, uri, body, combinedOptions, out requestDetails);
-            var response = TrySending(request, requestDetails, combinedOptions);
+            var response = await TrySending(request, requestDetails, combinedOptions);
             return new SubordinateResource(response, response.RequestMessage.RequestUri, _adapterFactory, _ambientPipelineOptions);
         }
 
-        private HttpResponseMessage TrySending(HttpRequestMessage request, HttpRequestMessageRequestDetails requestDetails, PipelineOptions options)
+        private async Task<HttpResponseMessage> TrySending(HttpRequestMessage request, HttpRequestMessageRequestDetails requestDetails, PipelineOptions options)
         {
             var adapter = _adapterFactory.CreateClient(options);
             HttpResponseMessage response;
             try
             {
-                response = adapter.SendAsync(request).Result;
+                response = await adapter.SendAsync(request);
             }
-            catch (AggregateException exception)
+            catch (Exception exception)
             {
                 if (SendError != null)
                 {
                     requestDetails = requestDetails ?? new HttpRequestMessageRequestDetails(request);
-                    SendError(this, new RequestErrorEventArgs(requestDetails, exception.InnerException));
+                    SendError(this, new RequestErrorEventArgs(requestDetails, exception));
                 }
-                throw exception.InnerException;
+                throw;
             }
 
             if (Responded != null)
@@ -113,10 +115,9 @@ namespace Everest
             if (body != null)
             {
                 var content = new StreamContent(body.AsStream());
-                if (body.MediaType != null)
-                {
-                    content.Headers.ContentType = new MediaTypeHeaderValue(body.MediaType);
-                }
+                foreach (var header in body.Headers)
+                    content.Headers.Add(header.Key, header.Value);
+
                 request.Content = content;
             }
             request.RequestUri = absoluteUri;

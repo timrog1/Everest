@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net;
+using System.Net.Cache;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Everest.Redirection;
@@ -11,28 +12,38 @@ namespace Everest.SystemNetHttp
         private readonly AutoRedirect _autoRedirect;
         private readonly HttpClient _client;
 
-        public SystemNetHttpClientAdapter(AutoRedirect autoRedirect)
+        public SystemNetHttpClientAdapter(AdapterOptions options)
         {
-            _autoRedirect = autoRedirect;
-            var handler = new HttpClientHandler
+            _autoRedirect = options.AutoRedirect;
+            var handler = new WebRequestHandler
             {
-                AllowAutoRedirect = !(AutoRedirect.AutoRedirectAndForwardAuthorizationHeader.Equals(autoRedirect) ||
-                                      AutoRedirect.DoNotAutoRedirect.Equals(autoRedirect)),
-                AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip,
-                UseCookies = false
+                AllowAutoRedirect = !(AutoRedirect.AutoRedirectAndForwardAuthorizationHeader.Equals(options.AutoRedirect) ||
+                                      AutoRedirect.DoNotAutoRedirect.Equals(options.AutoRedirect)),
+                UseCookies = false,
             };
+
+            if (options.CachePolicy.Cache)
+            {
+                handler.CachePolicy = new RequestCachePolicy(RequestCacheLevel.Default);
+            }
+
+            if (options.AcceptEncoding.AcceptGzipAndDeflate)
+            {
+                handler.AutomaticDecompression = DecompressionMethods.Deflate | DecompressionMethods.GZip;
+            }
+
             _client = new HttpClient(handler);
         }
 
-        public Task<HttpResponseMessage> SendAsync(HttpRequestMessage request)
-        {
-            var response = _client.SendAsync(request).Result;
+		public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request)
+		{
+            var response = await _client.SendAsync(request);
             if (ShouldManuallyRedirect(response))
             {
-                return _client.SendAsync(CreateRedirectRequest(request, response));
+                return await _client.SendAsync(CreateRedirectRequest(request, response));
             }
-            return Task.Factory.StartNew(() => response);
-        }
+		    return response;
+		}
 
         private bool ShouldManuallyRedirect(HttpResponseMessage response)
         {
