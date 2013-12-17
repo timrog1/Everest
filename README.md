@@ -1,22 +1,22 @@
 # Everest
 
-A resource-oriented HTTP client for .net
+A resource-oriented HTTP client for .net. This is an asynchronous fork of the synchronous Everest client.
 
 ### Install
 
 via [NuGet](http://nuget.org):
 
-    PM> Install-Package Everest
+    PM> Install-Package Everest-async
 
 ### Usage
 
     var client = new Everest.RestClient();
     
     // GET http://www.google.com
-    var homePage = client.Get("http://www.google.com");
+    var homePage = await client.Get("http://www.google.com");
     
     // GET http://www.google.com/search?q=everest+http+client
-    var searchResults = homePage.Get("search?q=everest+http+client");
+    var searchResults = await homePage.Get("search?q=everest+http+client");
     
     ...
 
@@ -28,12 +28,12 @@ To use Everest, create a [RestClient](Everest/RestClient.cs):
 
 A [RestClient](Everest/RestClient.cs) is a [Resource](Everest/Resource.cs), therefore it can be used to make requests, such as "Get" requests:
 
-    var homePage = client.Get("http://www.google.com");
+    var homePage = await client.Get("http://www.google.com");
 
 The response (homePage) is a [Response](Everest/Response.cs), which itself is also a [Resource](Everest/Resource.cs), so we can call "Get" on that too, to get a new Response, relative to the URI that responded to the first request:
 
     // GET http://www.google.com/search?q=everest+http+client
-    var searchResults = homePage.Get("search?q=everest+http+client");
+    var searchResults = await homePage.Get("search?q=everest+http+client");
 
 All requests return Responses, so we can do this over and over.
 
@@ -46,7 +46,7 @@ Everest requests are ultimately dispatched by calling the "Send" method on a [Re
         public interface Resource
         {
             ...
-            Response Send(HttpMethod method, string uri, BodyContent body, params PipelineOption[] overridingPipelineOptions);
+            Task<Response> Send(HttpMethod method, string uri, BodyContent body, params PipelineOption[] overridingPipelineOptions)
             ...
         }
     }
@@ -58,13 +58,17 @@ Most of the time, you have a particular verb in mind when you make an HTTP reque
         public static class ResourceApi
         {
             ...
-            public static Response Get(this Resource resource, string uri, params PipelineOption[] pipelineOptions)
+            public static Task<Response> Get(this Resource resource, string uri, params PipelineOption[] pipelineOptions)
             {
                 return resource.Send(HttpMethod.Get, uri, null, pipelineOptions);
             }
             ...
         }
     }
+
+#### Asynchronous programming
+
+This fork is designed to be solely asynchronous and requires .NET Framework 4.5. There are intentionally no options for making synchronous calls. Although you can call Result on any Task<Response> to make the request synchronously, you are strongly encourage to propagate async programming up to the top level of your code.
 
 #### Pipelines
 
