@@ -1,4 +1,4 @@
-# Everest
+# Everest-a
 
 A resource-oriented HTTP client for .net. This is an asynchronous fork of the synchronous Everest client.
 
