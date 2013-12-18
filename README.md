@@ -22,7 +22,7 @@ via [NuGet](http://nuget.org):
 
 #### Resource-Oriented?
 
-To use Everest, create a [RestClient](Everest/RestClient.cs):
+To use Everestª, create a [RestClient](Everest/RestClient.cs):
 
     var client = new Everest.RestClient();
 
@@ -39,7 +39,7 @@ All requests return Responses, so we can do this over and over.
 
 #### Resource API
 
-Everest requests are ultimately dispatched by calling the "Send" method on a [Resource](Everest/Resource.cs), to get a [Response](Everest/Response.cs):
+Everestª requests are ultimately dispatched by calling the "Send" method on a [Resource](Everest/Resource.cs), to get a [Response](Everest/Response.cs):
 
     namespace Everest
     {
